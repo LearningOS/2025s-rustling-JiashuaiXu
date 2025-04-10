@@ -1,64 +1,34 @@
 {
-  description = "Small exercises to get you used to reading and writing Rust code";
+  description = "Rust nightly development environment";
 
   inputs = {
-    flake-compat = {
-      url = "github:edolstra/flake-compat";
-      flake = false;
-    };
-    flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { self, flake-utils, nixpkgs, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
+  outputs = { self, nixpkgs, rust-overlay }: let
+    system = "x86_64-linux";
+    pkgs = import nixpkgs {
+      inherit system;
+      overlays = [ (import rust-overlay) ];
+    };
+  in {
+    devShells.${system}.default = pkgs.mkShell {
+      buildInputs = [
+        pkgs.rust-bin.nightly.latest.default
+        pkgs.cargo
+        pkgs.rustfmt
+        pkgs.clippy
+        pkgs.rust-analyzer
+        pkgs.cowsay
+        pkgs.lolcat
+      ];
 
-        cargoBuildInputs = with pkgs; lib.optionals stdenv.isDarwin [
-          darwin.apple_sdk.frameworks.CoreServices
-        ];
-
-        rustlings =
-          pkgs.rustPlatform.buildRustPackage {
-            name = "rustlings";
-            version = "5.5.1";
-
-            buildInputs = cargoBuildInputs;
-
-            src = with pkgs.lib; cleanSourceWith {
-              src = self;
-              # a function that returns a bool determining if the path should be included in the cleaned source
-              filter = path: type:
-                let
-                  # filename
-                  baseName = builtins.baseNameOf (toString path);
-                  # path from root directory
-                  path' = builtins.replaceStrings [ "${self}/" ] [ "" ] path;
-                  # checks if path is in the directory
-                  inDirectory = directory: hasPrefix directory path';
-                in
-                inDirectory "src" ||
-                inDirectory "tests" ||
-                hasPrefix "Cargo" baseName ||
-                baseName == "info.toml";
-            };
-
-            cargoLock.lockFile = ./Cargo.lock;
-          };
-      in
-      {
-        devShell = pkgs.mkShell {
-          RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
-
-          buildInputs = with pkgs; [
-            cargo
-            rustc
-            rust-analyzer
-            rustlings
-            rustfmt
-            clippy
-          ] ++ cargoBuildInputs;
-        };
-      });
+      shellHook = ''
+        echo "Welcome to the Rust nightly dev shell!" | lolcat
+        cowsay "Rust version: $(rustc --version)" | lolcat
+      '';
+    };
+  };
 }
+
